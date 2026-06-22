@@ -1,0 +1,115 @@
+/*
+ * ============================================================
+ *  CALCULATRICE ARDUINO
+ *  Projet : Electronique Embarquee
+ *  EMSI Casablanca - 2eme Annee IIR
+ *
+ *  Composants :
+ *    -> Arduino UNO
+ *    -> Clavier matriciel 4x4
+ *    -> Afficheur LCD 16x2 (I2C)
+ *
+ *  Auteur : Ayoub ABIDA
+ *  Simulation : Wokwi
+ *  Date : 2025-2026
+ * ============================================================
+ */
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const byte ROWS = 4;
+const byte COLS = 4;
+char keys[ROWS][COLS] = {
+  {'1','2','3','+'},
+  {'4','5','6','-'},
+  {'7','8','9','*'},
+  {'C','0','=','/'}
+};
+
+byte rowPins[ROWS] = {9, 8, 7, 6};
+byte colPins[COLS] = {5, 4, 3, 2};
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+String expression = "";
+
+void setup() {
+  lcd.begin(16, 2, LCD_5x8DOTS);
+  lcd.backlight();
+  lcd.clear();
+  lcd.print("Calculator Ready");
+  delay(1500);
+  lcd.clear();
+}
+
+void loop() {
+  char key = keypad.getKey();
+
+  if (key != NO_KEY) {
+    if ((key >= '0' && key <= '9') || key == '+' || key == '-' || key == '*' || key == '/') {
+      if (expression.length() < 16) {
+        expression += key;
+        lcd.setCursor(0, 0);
+        lcd.print(expression);
+      }
+    } else if (key == '=') {
+      float result = evaluateWithPrecedence(expression);
+      lcd.setCursor(0, 1);
+      lcd.print("= ");
+      lcd.print(result);
+      expression = "";
+    } else if (key == 'C') {
+      expression = "";
+      lcd.clear();
+    }
+  }
+}
+
+// Evaluation avec priorite des operateurs (* et / avant + et -)
+float evaluateWithPrecedence(String expr) {
+  float numbers[10];
+  char operators[10];
+  int numIndex = 0, opIndex = 0;
+  String temp = "";
+
+  for (int i = 0; i < expr.length(); i++) {
+    char c = expr.charAt(i);
+    if (c >= '0' && c <= '9') {
+      temp += c;
+    } else {
+      numbers[numIndex++] = temp.toFloat();
+      temp = "";
+      operators[opIndex++] = c;
+    }
+  }
+  numbers[numIndex] = temp.toFloat();
+
+  // Premier passage : * et /
+  for (int i = 0; i < opIndex; i++) {
+    if (operators[i] == '*' || operators[i] == '/') {
+      float a = numbers[i];
+      float b = numbers[i+1];
+      float result = (operators[i] == '*') ? a * b : (b != 0 ? a / b : 0);
+
+      numbers[i] = result;
+      for (int j = i + 1; j < numIndex; j++) numbers[j] = numbers[j + 1];
+      for (int j = i; j < opIndex - 1; j++) operators[j] = operators[j + 1];
+      numIndex--;
+      opIndex--;
+      i--;
+    }
+  }
+
+  // Deuxieme passage : + et -
+  float total = numbers[0];
+  for (int i = 0; i < opIndex; i++) {
+    if (operators[i] == '+') total += numbers[i + 1];
+    else if (operators[i] == '-') total -= numbers[i + 1];
+  }
+
+  return total;
+}
